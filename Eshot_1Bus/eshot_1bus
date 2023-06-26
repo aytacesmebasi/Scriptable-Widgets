@@ -1,1 +1,73 @@
+const fm = FileManager.iCloud();
+const baseURL = "https://openapi.izmir.bel.tr/api/eshot/hareketsaatleri/";
+const folderName = "eshot";
 
+async function createFolder() {
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  if (!fm.fileExists(folderPath)) {
+    fm.createDirectory(folderPath);
+    console.log(`Klasör oluşturuldu: ${folderPath}`);
+  }
+}
+
+async function downloadFile(route, fileName) {
+  const apiURL = baseURL + route;
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  const savePath = fm.joinPath(folderPath, fileName);
+
+  const request = new Request(apiURL);
+  const response = await request.loadJSON();
+  const jsonString = JSON.stringify(response);
+
+  try {
+    fm.writeString(savePath, jsonString);
+    console.log(`Dosya kaydedildi: ${savePath}`);
+  } catch (error) {
+    console.log(`Dosya yazma hatası: ${error}`);
+  }
+}
+
+async function createWidget() {
+  // Güncel saati al
+  const currentDate = new Date();
+  const currentHour = currentDate.getHours();
+  const currentMinute = currentDate.getMinutes();
+  const currentDateTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+
+  // "565.json" dosyasını oku
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  const filePath = fm.joinPath(folderPath, '565.json');
+  const fileContents = fm.readString(filePath);
+  const jsonData = JSON.parse(fileContents);
+
+  // Gidiş saatlerini kontrol et
+  const departureTimes = jsonData.HareketSaatleriHici.map(hareket => hareket.GidisSaat);
+
+  // "guncelsaat"ten sonraki ilk saat verisini bul
+  const index = departureTimes.findIndex(time => time > currentDateTime);
+  const nextDepartureTime = index !== -1 ? departureTimes[index] : departureTimes[0];
+
+  // Widget oluşturma işlemleri
+  const widget = new ListWidget();
+  const title = widget.addText('Güncel Saat: ' + currentDateTime);
+  const departureTime = widget.addText('Sonraki Kalkış: ' + nextDepartureTime);
+  
+  // Widget görünümü ayarları
+  title.font = Font.boldSystemFont(16);
+  departureTime.font = Font.systemFont(14);
+  
+  // Widget'i görüntüle
+  if (config.runsInWidget) {
+    Script.setWidget(widget);
+  } else {
+    widget.presentMedium();
+  }
+  
+  // Widget tamamlandı
+  Script.complete();
+}
+
+await createFolder();
+await downloadFile("565", "565.json");
+await downloadFile("566", "566.json");
+await createWidget();
