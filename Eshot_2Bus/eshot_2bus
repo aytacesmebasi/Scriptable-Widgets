@@ -1,0 +1,87 @@
+const fm = FileManager.iCloud();
+const baseURL = "https://openapi.izmir.bel.tr/api/eshot/hareketsaatleri/";
+const folderName = "eshot";
+
+async function createFolder() {
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  if (!fm.fileExists(folderPath)) {
+    fm.createDirectory(folderPath);
+    console.log(`Klasör oluşturuldu: ${folderPath}`);
+  }
+}
+
+async function downloadFile(route, fileName) {
+  const apiURL = baseURL + route;
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  const savePath = fm.joinPath(folderPath, fileName);
+
+  const request = new Request(apiURL);
+  const response = await request.loadJSON();
+  const jsonString = JSON.stringify(response);
+
+  try {
+    fm.writeString(savePath, jsonString);
+    console.log(`Dosya kaydedildi: ${savePath}`);
+  } catch (error) {
+    console.log(`Dosya yazma hatası: ${error}`);
+  }
+}
+
+async function createWidget() {
+  // Güncel saati al
+  const currentDate = new Date();
+  const currentHour = currentDate.getHours();
+  const currentMinute = currentDate.getMinutes();
+  const currentDateTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+
+  // "565.json" dosyasını ve "566.json" dosyasını oku
+  const folderPath = fm.joinPath(fm.documentsDirectory(), folderName);
+  const file565Path = fm.joinPath(folderPath, '565.json');
+  const file566Path = fm.joinPath(folderPath, '566.json');
+  const file565Contents = fm.readString(file565Path);
+  const file566Contents = fm.readString(file566Path);
+  const jsonData565 = JSON.parse(file565Contents);
+  const jsonData566 = JSON.parse(file566Contents);
+
+  // Gidiş saatlerini kontrol et
+  const departureTimes565 = jsonData565.HareketSaatleriHici.map(hareket => hareket.GidisSaat);
+  const departureTimes566 = jsonData566.HareketSaatleriHici.map(hareket => hareket.GidisSaat);
+
+  // "guncelsaat"ten sonraki ilk saat verisini bul
+  const index565 = departureTimes565.findIndex(time => time > currentDateTime);
+  const nextDepartureTime565 = index565 !== -1 ? departureTimes565[index565] : departureTimes565[0];
+
+  const index566 = departureTimes566.findIndex(time => time > currentDateTime);
+  const nextDepartureTime566 = index566 !== -1 ? departureTimes566[index566] : departureTimes566[0];
+
+  // Widget oluşturma işlemleri
+  const widget = new ListWidget();
+  const fileNameWithoutExtension565 = '565';
+  const fileNameWithoutExtension566 = '566';
+  const title = widget.addText('Güncel Saat: ' + currentDateTime);
+  const departureTime565 = widget.addText(`Sonraki Kalkış (${fileNameWithoutExtension565}): ${nextDepartureTime565}`);
+  const departureTime566 = widget.addText(`Sonraki Kalkış (${fileNameWithoutExtension566}): ${nextDepartureTime566}`);
+
+  // Widget görünümü ayarları
+  title.font = Font.boldSystemFont(16);
+  departureTime565.font = Font.systemFont(14);
+  departureTime566.font = Font.systemFont(14);
+
+  // Widget'i görüntüle
+  if (config.runsInWidget) {
+    Script.setWidget(widget);
+  } else {
+    widget.presentMedium();
+  }
+
+  // Widget tamamlandı
+  Script.complete();
+}
+
+async function run() {
+  await createFolder();
+  await Promise.all([downloadFile("565", "565.json"), downloadFile("566", "566.json")]);
+  await createWidget();
+}
+
+await run();
